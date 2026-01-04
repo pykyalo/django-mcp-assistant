@@ -1,0 +1,13 @@
+[project]
+name = "django-mcp-assistant"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "aiofiles>=25.1.0",
+    "anthropic>=0.75.0",
+    "django>=6.0",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.1",
+]
