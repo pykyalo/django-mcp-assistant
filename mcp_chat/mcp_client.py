@@ -3,18 +3,16 @@ MCP Client - manages conversation with Claude and routes tool calls to MCP serve
 """
 
 import os
-from unittest import result
 import anthropic
 from typing import List, Dict, Any, Optional
 import json
-import asyncio
 from django.conf import settings
 import logging
 
+from .mcp_servers import MCPServer, VoIPDocsServer, WeatherServer
+
 
 logger = logging.getLogger(__name__)
-
-from .mcp_servers import MCPServer, VOIPDocsServer, WeatherServer
 
 
 class MCPClient:
@@ -23,7 +21,7 @@ class MCPClient:
     This is the 'smart' part that routes Claude's tool requests to MCP servers.
     """
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(self) -> None:
         self.client = anthropic.Client(
             api_key=settings.ANTHROPIC_API_KEY,
             max_retries=3,
@@ -32,7 +30,7 @@ class MCPClient:
         self.model = settings.ANTHROPIC_MODEL
 
         # Initialize MCP servers
-        self.servers = Dict[str, MCPServer] = {}
+        self.servers: Dict[str, MCPServer] = {}
         self._initialize_servers()
 
     def _initialize_servers(self) -> None:
@@ -43,7 +41,7 @@ class MCPClient:
         # VoIp documentation server
         docs_dir = os.getenv("VOIP_DOCS_DIR", "/tmp/voip_docs")
         os.makedirs(docs_dir, exist_ok=True)
-        self.servers["voip-docs"] = VOIPDocsServer(docs_dir)
+        self.servers["voip-docs"] = VoIPDocsServer(docs_dir)
 
         # Weather server
         self.servers["weather"] = WeatherServer()
@@ -103,7 +101,7 @@ class MCPClient:
     async def send_message(
         self,
         user_message: str,
-        conversation_history: Optional[List[Dict[str, Anyy]]] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """Send message to Claude with MCP tool support.
         Handles the full conversation loop including tool calls.
@@ -129,7 +127,7 @@ class MCPClient:
         resources = self.get_all_resources()
         resource_info = self._format_resources(resources)
 
-        system_prompt = """You are a helpful assistant with access to  VoIP/SIP  documentation and other tools.
+        system_prompt = f"""You are a helpful assistant with access to  VoIP/SIP  documentation and other tools.
         Available Resources:
         {resource_info}
 
@@ -148,7 +146,7 @@ class MCPClient:
         max_iterations = 5  # Prevent infinite loops
         iteration = 0
 
-        while iteration < max_iteratons:
+        while iteration < max_iterations:
             iteration += 1
 
             logger.info(f"\n API Call #{iteration}")

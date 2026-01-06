@@ -3,7 +3,6 @@ MCP Server definitions with robust PDF extraction
 """
 
 from typing import List, Dict, Any, Tuple
-import json
 import os
 from pathlib import Path
 import pypdf
