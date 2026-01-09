@@ -64,22 +64,39 @@ class MCPClient:
                 all_tools.append(tool)
         return all_tools
 
+    def get_clean_tools_for_api(self) -> List[Dict[str, Any]]:
+        """Get tools without internal metadata for Anthropic API."""
+        clean_tools = []
+
+        for server_name, server in self.servers.items():
+            tools = server.get_tools()
+
+            for tool in tools:
+                # Create a clean copy without internal fields
+                clean_tool = {k: v for k, v in tool.items() if not k.startswith("_")}
+                clean_tools.append(clean_tool)
+
+        return clean_tools
+
     def get_all_resources(self) -> List[Dict[str, Any]]:
-        """Aggregate all resources from all the servers"""
+        """Aggregate all resources from all the servers, filtering for FreeSWITCH/SIP"""
         all_resources = []
 
         for server_name, server in self.servers.items():
             resources = server.get_resources()
 
-            # Add server metadata to each resource
+            # Add server metadata to each resource and filter by name
             for resource in resources:
-                resource["_server"] = (
-                    server_name  # Track which server owns this resource
-                )
-                all_resources.append(resource)
+                resource_name = resource.get("name", "").lower()
+                # Only include resources with FreeSWITCH or SIP in their names
+                if "freeswitch" in resource_name or "sip" in resource_name:
+                    resource["_server"] = (
+                        server_name  # Track which server owns this resource
+                    )
+                    all_resources.append(resource)
         return all_resources
 
-    async def handle_tool_calling(
+    async def handle_tool_call(
         self, tool_name: str, tool_input: Dict[str, Any], server_name: str
     ) -> Any:
         """Handle tool calling by routing to the appropriate server."""
@@ -120,23 +137,28 @@ class MCPClient:
         # Add user message
         messages = conversation_history + [{"role": "user", "content": user_message}]
 
-        # Get all available tools
-        tools = self.get_all_tools()
+        # Get clean tools for API (without internal metadata)
+        clean_tools = self.get_clean_tools_for_api()
+
+        # Get tools with metadata for server routing
+        tools_with_metadata = self.get_all_tools()
 
         # Build system prompt with resource information
         resources = self.get_all_resources()
         resource_info = self._format_resources(resources)
 
-        system_prompt = f"""You are a helpful assistant with access to  VoIP/SIP  documentation and other tools.
+        system_prompt = f"""You are a helpful assistant with access to multiple tools and resources.
+
         Available Resources:
         {resource_info}
 
-        When  users ask about VoIP, SIP, FreeSWITCH, or related topics:
-        - Use the  search_voip_docs tool to find relevant information
-        - Use get_sip_message_example to show SIP message formats
-        - Cite specific sources when using documentation
+        Tool Usage Guidelines:
+        - For weather-related queries: Use weather tools (get_weather, etc.)
+        - For VoIP, SIP, FreeSWITCH, or telephony topics: Use search_voip_docs tool and get_sip_message_example
+        - Always choose the most appropriate tool based on the user's question topic
+        - When using documentation, cite specific sources
 
-        You also have  access to weather data if needed.
+        Choose tools carefully based on the user's actual question topic.
         """
 
         # Track tool calls made
@@ -156,7 +178,7 @@ class MCPClient:
                 model=self.model,
                 max_tokens=4096,
                 system=system_prompt,
-                tools=tools,
+                tools=clean_tools,
                 messages=messages,
             )
 
@@ -178,7 +200,7 @@ class MCPClient:
 
                         # Find which server owns this tool
                         server_name = None
-                        for tool_def in tools:
+                        for tool_def in tools_with_metadata:
                             if tool_def["name"] == tool_name:
                                 server_name = tool_def.get("_server")
                                 break
